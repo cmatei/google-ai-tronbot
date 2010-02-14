@@ -7,6 +7,9 @@
 (defparameter *input* *standard-input*)
 (defparameter *output* *standard-output*)
 
+(defparameter *verbose* nil)
+(defparameter *log* nil)
+
 (defstruct tron
   (map nil)
   (width 0 :type fixnum)
@@ -192,3 +195,13 @@
   (format s "~%~a" (tron-map-string (tron-map tron))))
     
 	 
+(defun logmsg (&rest args)
+  (when (and *verbose*
+	     (not *log*))
+    (setf *log* (open "sbcl.log"
+		      :direction :output
+		      :if-exists :append
+		      :if-does-not-exist :create)))
+    (when *verbose*
+      (format *log* (with-output-to-string (s) (dolist (a args) (princ a s))))
+      (force-output *log*)))

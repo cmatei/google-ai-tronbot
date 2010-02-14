@@ -1,17 +1,19 @@
 
-(proclaim '(optimize (speed 3) (safety 1) (debug 3)))
+(proclaim '(optimize (speed 3) (safety 3) (debug 3)))
 
 (load "Map.lisp")
 
 (in-package :my-tron-bot)
 
 (declaim (type fixnum +victory+ +defeat+ +draw+))
-(defparameter +victory+ 100)
-(defparameter +defeat+ -100)
-(defparameter +draw+    -50)
+(defparameter +victory+ 5000)
+(defparameter +defeat+ -5000)
+(defparameter +draw+   -2500)
 
 (declaim (type fixnum +minimax-depth+))
-(defparameter +minimax-depth+ 8)
+(defparameter +minimax-depth+ 5)
+
+(setq *verbose* t)
 
 (defun count-reachables (tron color)
   (let ((map (copy-tron-map (tron-map tron)))
@@ -27,39 +29,27 @@
 		   (progn
 		     (setf (aref map x y) #\#)
 		     (+ 1
-			(the fixnum (ff-area (1- x) y))
-			(the fixnum (ff-area x (1- y)))
-			(the fixnum (ff-area (1+ x) y))
-			(the fixnum (ff-area x (1+ y))))))))
+			(ff-area (1- x) y)
+			(ff-area x (1- y))
+			(ff-area (1+ x) y)
+			(ff-area x (1+ y)))))))
 
-	(the fixnum (+ (the fixnum (ff-area (1- x) y))
-		       (the fixnum (ff-area x (1- y)))
-		       (the fixnum (ff-area (1+ x) y))
-		       (the fixnum (ff-area x (1+ y))))))))
-  
-
-;; (defparameter tt
-;; (with-input-from-string (*input*
-;; "5 5
-;; #####
-;; # 1##
-;; #2###
-;; #   #
-;; #####
-;; ")
-;;   (read-tron (make-tron))))
-;; 
-;; (defparameter tt
-;;   (with-open-file (*input* "maps/u.txt")
-;;     (read-tron (make-tron))))
-;; 
-;; (time (count-reachables tt -1))
+      (+ (ff-area (1- x) y)
+	 (ff-area x (1- y))
+	 (ff-area (1+ x) y)
+	 (ff-area x (1+ y))))))
 
 (defun node-value (node color)
-  (let ((reachable (count-reachables node color))
+  (let ((reach1 (count-reachables node color))
+	(reach2 (count-reachables node (- color)))
 	(area (tron-area node)))
-    (the fixnum (truncate (* +victory+
-			     (/ reachable area))))))
+    (let ((val (- reach1 reach2)))
+      (setq val (the fixnum (truncate val)))
+;      (logmsg node)
+;    (let ((val (the fixnum (truncate (* +victory+
+;				       (/ reachable area))))))
+      (logmsg "Node value " (list val reach1 reach2) "~%")
+      val)))
 
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
@@ -86,9 +76,13 @@
 	as child = (make-child-tron node move color)
 	when child do
 	  (let ((cval (negamax child (1- depth) (- beta) (- alpha) (- color))))
+	    (when (= depth 1)
+	      (logmsg child)
+	      (logmsg "At depth 1 negamax " cval ", alpha " alpha
+		      ", beta " beta ", color " color "~%"))
 	    (when (> cval alpha)
 	      (setq alpha cval))
-	    (when (> alpha beta)
+	    (when (>= alpha beta)
 ;	      (format t "prunning, alpha ~a, beta ~a, color ~a~%" alpha beta color)
 ;	      (print child)
 	      (return-from nmax alpha))
@@ -120,6 +114,7 @@
 (defun decide-move (tron)
   (let ((nm (find-negamax-move tron)))
     (setq nm (sort nm #'> :key (lambda (x) (cadr x))))
+    (logmsg "nm " nm "~%")
     (if nm (caar nm) ':left)))
 
 ;(defparameter tt (with-open-file (*input* "test.txt")
