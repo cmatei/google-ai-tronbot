@@ -21,15 +21,25 @@
   (the fixnum (* (tron-width tron)
 		 (tron-height tron))))
 
+(declaim (inline x-of))
 (defun x-of (tron color)
   (if (= color 1)
       (car (tron-p1 tron))
       (car (tron-p2 tron))))
 
+(declaim (inline y-of))
 (defun y-of (tron color)
   (if (= color 1)
       (cadr (tron-p1 tron))
       (cadr (tron-p2 tron))))
+
+(defun player-distance (tron)
+  (let ((x1 (x-of tron 1))
+	(y1 (y-of tron 1))
+	(x2 (x-of tron -1))
+	(y2 (y-of tron -1)))
+    (sqrt (+ (* (- x2 x1) (- x2 x1))
+	     (* (- y2 y1) (- y2 y1))))))
 
 (declaim (inline empty-square-p))
 (defun empty-square-p (map x y)
@@ -49,22 +59,20 @@
 	     (empty-square-p map x (the fixnum (1+ y)))))))
 
 (declaim (inline victory-p))
-(defun victory-p (tron player)
-  (declare (type fixnum player))
-  (and (not (player-stuck-p tron player))
-       (player-stuck-p tron (the fixnum (- player)))))
+(defun victory-p (tron)
+  (and (not (player-stuck-p tron 1))
+       (player-stuck-p tron -1)))
 
 (declaim (inline defeat-p))
-(defun defeat-p (tron player)
-  (declare (type fixnum player))
-  (and (player-stuck-p tron player)
-       (not (player-stuck-p tron (the fixnum (- player))))))
+(defun defeat-p (tron)
+  (and (player-stuck-p tron 1)
+       (not (player-stuck-p tron -1))))
 
 (declaim (inline drawp-p))
-(defun draw-p (tron player)
-  (declare (type fixnum player))
-  (and (player-stuck-p tron player)
-       (player-stuck-p tron (the fixnum (- player)))))
+(defun draw-p (tron)
+  (or (and (player-stuck-p tron 1)
+	   (player-stuck-p tron -1))
+      (equal (tron-p1 tron) (tron-p2 tron))))
 
 (defun set-tron-size (tron line)
   (let ((sp (position #\space line)))
@@ -138,9 +146,10 @@
   (declare (type tron node)
 	   (type fixnum color))
 
-  (let* ((pos (if (= color 1) (tron-p1 node) (tron-p2 node)))
-	 (x (car pos))
-	 (y (cadr pos)))
+  (let* ((x (x-of node color))
+	 (y (y-of node color))
+	 (xo (x-of node (- color)))
+	 (yo (y-of node (- color))))
     (declare (type fixnum x y))
 
     (case move
@@ -148,8 +157,10 @@
       (:right (incf x))
       (:up    (decf y))
       (:down  (incf y)))
-    
-    (if (not (empty-square-p (tron-map node) x y))
+
+    ;; can move to a non-empty square if the opponent is there
+    (if (and (not (empty-square-p (tron-map node) x y))
+	     (not (and (equal x xo) (equal y yo))))
 	nil
 	(let* ((newtron (make-tron))
 	       (map (copy-tron-map (tron-map node))))
@@ -201,7 +212,8 @@
     (setf *log* (open "sbcl.log"
 		      :direction :output
 		      :if-exists :append
-		      :if-does-not-exist :create)))
-    (when *verbose*
-      (format *log* (with-output-to-string (s) (dolist (a args) (princ a s))))
-      (force-output *log*)))
+		      :if-does-not-exist :create))
+    (setf *trace-output* *log*))
+  (when *verbose*
+    (format *log* (with-output-to-string (s) (dolist (a args) (princ a s))))
+    (force-output *log*)))

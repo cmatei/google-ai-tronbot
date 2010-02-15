@@ -11,9 +11,10 @@
 (defparameter +draw+   -2500)
 
 (declaim (type fixnum +minimax-depth+))
-(defparameter +minimax-depth+ 5)
+(defparameter +minimax-depth+ 8)
 
-(setq *verbose* t)
+
+(setq *verbose* nil)
 
 (defun count-reachables (tron color)
   (let ((map (copy-tron-map (tron-map tron)))
@@ -39,35 +40,26 @@
 	 (ff-area (1+ x) y)
 	 (ff-area x (1+ y))))))
 
-(defun node-value (node color)
-  (let ((reach1 (count-reachables node color))
-	(reach2 (count-reachables node (- color)))
-	(area (tron-area node)))
+(defun node-value (node)
+  (let ((reach1 (count-reachables node 1))
+	(reach2 (count-reachables node -1)))
     (let ((val (- reach1 reach2)))
-      (setq val (the fixnum (truncate val)))
-;      (logmsg node)
-;    (let ((val (the fixnum (truncate (* +victory+
-;				       (/ reachable area))))))
-      (logmsg "Node value " (list val reach1 reach2) "~%")
-      val)))
+      (truncate val))))
 
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
   (cond
-    ((victory-p node color)
-;     (format t "victory for ~a~%" color)
-     (the fixnum (* color +victory+)))
+    ((victory-p node)
+     (* color +victory+))
     
-    ((defeat-p node color)
-;     (format t "defeat for ~a~%" color)
-     (the fixnum (* color +defeat+)))
+    ((defeat-p node)
+     (* color +defeat+))
     
-    ((draw-p node color)
-;     (format t "draw!~%")
-     (the fixnum (* color +draw+)))
+    ((draw-p node)
+     (* color +draw+))
     
     ((zerop depth)
-     (the fixnum (* color (the fixnum (node-value node color)))))
+     (* color (node-value node)))
     
     (t
      (loop
@@ -75,55 +67,55 @@
 	for move in '(:left :up :right :down)
 	as child = (make-child-tron node move color)
 	when child do
-	  (let ((cval (negamax child (1- depth) (- beta) (- alpha) (- color))))
-	    (when (= depth 1)
-	      (logmsg child)
-	      (logmsg "At depth 1 negamax " cval ", alpha " alpha
-		      ", beta " beta ", color " color "~%"))
+	  (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
+;	    (when (< depth 2)
+;	      (logmsg "-----------~%~%")
+;	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
+;	      (logmsg child)
+;	      )
+	    
 	    (when (> cval alpha)
 	      (setq alpha cval))
-	    (when (>= alpha beta)
-;	      (format t "prunning, alpha ~a, beta ~a, color ~a~%" alpha beta color)
-;	      (print child)
-	      (return-from nmax alpha))
-	    )
+	    (when (>= cval beta)
+	      (return-from nmax alpha)))
 	finally (return-from nmax alpha)))))
 
-(defun find-negamax-move (node)
-  (let* ((alpha +defeat+)
-	 (beta +victory+)
-	 (color 1)
-	 (depth +minimax-depth+))
+(defun find-negamax-moves (node)
+  (let ((nm nil))
+    (setq nm
+	  (loop
+	     for move in '(:left :up :right :down)
+	     as child = (make-child-tron node move 1)
+	     when child collect
+	       (list move
+		     (- (negamax child (1- +minimax-depth+) +defeat+  +victory+ -1))
+		     child)))
     
-    (declare (type fixnum alpha beta color depth))
-    (loop
-       for move in '(:left :up :right :down)
-       as child = (make-child-tron node move 1)
-       when child do
-	 (let ((cval (the fixnum (negamax
-				  child
-				  (the fixnum (1- depth))
-				  (the fixnum (- beta))
-				  (the fixnum (- alpha))
-				  (the fixnum (- color))))))
-	    (when (> cval alpha)
-	      (setq alpha cval)))
-       and collect (list move alpha))))
-
+    (sort nm #'> :key (lambda (x) (cadr x)))))
+    
 
 (defun decide-move (tron)
-  (let ((nm (find-negamax-move tron)))
-    (setq nm (sort nm #'> :key (lambda (x) (cadr x))))
-    (logmsg "nm " nm "~%")
-    (if nm (caar nm) ':left)))
+  (let ((moves (find-negamax-moves tron)))
 
-;(defparameter tt (with-open-file (*input* "test.txt")
-;		   (read-tron (make-tron))))
+     (mapcar (lambda (x) (logmsg (car x) " " (cadr x) ",  ")) moves)
+     (logmsg "~%")
+;;     
+;;     ;; from equivalent moves, choose the one that brings us closer
+     (setq moves (remove-if-not (lambda (x) (equal (cadr x) (cadar moves)))
+ 			       moves))
+;; 
+     (mapcar (lambda (x) (logmsg (car x) " " (cadr x) ",  ")) moves)
+     (logmsg "~%~%")
+;;     
+    (setq moves (sort moves #'< :key (lambda (x) (player-distance (caddr x)))))
+
+    (if moves (caar moves) ':left)))
 
 
 ;;; driver loop
 
 (defun main ()
+  (logmsg "== New match!~%~%")
   (loop
      with tron = (make-tron)
      while (peek-char nil *input* nil nil)
