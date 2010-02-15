@@ -11,10 +11,10 @@
 (defparameter +draw+   -2500)
 
 (declaim (type fixnum +minimax-depth+))
-(defparameter +minimax-depth+ 8)
+(defparameter +minimax-depth+ 7)
 
 
-(setq *verbose* nil)
+(setq *verbose* t)
 
 (defun count-reachables (tron color)
   (let ((map (copy-tron-map (tron-map tron)))
@@ -49,14 +49,17 @@
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
   (cond
+    ((draw-p node)
+     (logmsg "DRAW!~%")
+     (* color +draw+))
+        
     ((victory-p node)
+     (logmsg "VICTORY!~%")
      (* color +victory+))
     
     ((defeat-p node)
+     (logmsg "DEFEAT!~%")     
      (* color +defeat+))
-    
-    ((draw-p node)
-     (* color +draw+))
     
     ((zerop depth)
      (* color (node-value node)))
@@ -68,11 +71,11 @@
 	as child = (make-child-tron node move color)
 	when child do
 	  (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
-;	    (when (< depth 2)
-;	      (logmsg "-----------~%~%")
-;	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
-;	      (logmsg child)
-;	      )
+	    (when (= depth 6)
+	      (logmsg "-----------~%~%")
+	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
+	      (logmsg child)
+	      )
 	    
 	    (when (> cval alpha)
 	      (setq alpha cval))
@@ -86,7 +89,9 @@
 	  (loop
 	     for move in '(:left :up :right :down)
 	     as child = (make-child-tron node move 1)
-	     when child collect
+	     when child do
+	       (logmsg child)
+	     and collect
 	       (list move
 		     (- (negamax child (1- +minimax-depth+) +defeat+  +victory+ -1))
 		     child)))
