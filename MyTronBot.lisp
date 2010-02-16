@@ -14,7 +14,7 @@
 (defparameter +minimax-depth+ 7)
 
 
-(setq *verbose* t)
+(setq *verbose* nil)
 
 (defun count-reachables (tron color)
   (let ((map (copy-tron-map (tron-map tron)))
@@ -40,26 +40,32 @@
 	 (ff-area (1+ x) y)
 	 (ff-area x (1+ y))))))
 
+
 (defun node-value (node)
-  (let ((reach1 (count-reachables node 1))
-	(reach2 (count-reachables node -1)))
-    (let ((val (- reach1 reach2)))
-      (truncate val))))
+  (let* ((reach1 (count-reachables node 1))
+	 (reach2 (count-reachables node -1))
+	 (val (- reach1 reach2)))
+    (truncate val)))
 
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
+
   (cond
-    ((draw-p node)
-     (logmsg "DRAW!~%")
+;;    ((draw-p node color)
+;;     (logmsg "DRAW!~%")
+;;     (* color +draw+))
+;;        
+;;    ((victory-p node color)
+;;     (logmsg "VICTORY!~%")
+;;     (* color +victory+))
+;;    
+;;    ((defeat-p node color)
+;;     (logmsg "DEFEAT!~%")     
+;;     (* color +defeat+))
+
+    ((and (= color 1)
+	  (equal (tron-p1 node) (tron-p2 node)))
      (* color +draw+))
-        
-    ((victory-p node)
-     (logmsg "VICTORY!~%")
-     (* color +victory+))
-    
-    ((defeat-p node)
-     (logmsg "DEFEAT!~%")     
-     (* color +defeat+))
     
     ((zerop depth)
      (* color (node-value node)))
@@ -69,13 +75,16 @@
 	named nmax
 	for move in '(:left :up :right :down)
 	as child = (make-child-tron node move color)
+;	if (not child) do
+;	  (logmsg "DEPTH: " depth ", " color " can't move " move "~%")
+;	else do
 	when child do
 	  (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
-	    (when (= depth 6)
-	      (logmsg "-----------~%~%")
-	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
-	      (logmsg child)
-	      )
+;	    (when (= depth 3)
+;	      (logmsg "-----------~%~%")
+;	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
+;	      (logmsg child)
+;	      )
 	    
 	    (when (> cval alpha)
 	      (setq alpha cval))
@@ -90,7 +99,7 @@
 	     for move in '(:left :up :right :down)
 	     as child = (make-child-tron node move 1)
 	     when child do
-	       (logmsg child)
+	       (logmsg "find-negamax-moves: " move "~%" child)
 	     and collect
 	       (list move
 		     (- (negamax child (1- +minimax-depth+) +defeat+  +victory+ -1))

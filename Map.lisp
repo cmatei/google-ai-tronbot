@@ -58,21 +58,6 @@
 	     (empty-square-p map x (the fixnum (1- y)))
 	     (empty-square-p map x (the fixnum (1+ y)))))))
 
-(declaim (inline victory-p))
-(defun victory-p (tron)
-  (and (not (player-stuck-p tron 1))
-       (player-stuck-p tron -1)))
-
-(declaim (inline defeat-p))
-(defun defeat-p (tron)
-  (and (player-stuck-p tron 1)
-       (not (player-stuck-p tron -1))))
-
-(declaim (inline drawp-p))
-(defun draw-p (tron)
-  (or (and (player-stuck-p tron 1)
-	   (player-stuck-p tron -1))
-      (equal (tron-p1 tron) (tron-p2 tron))))
 
 (defun set-tron-size (tron line)
   (let ((sp (position #\space line)))
@@ -109,10 +94,6 @@
 
 (defun make-move (dir)
   (case dir
-    (:north (princ "1" *output*))
-    (:east  (princ "2" *output*))
-    (:south (princ "3" *output*))
-    (:west  (princ "4" *output*))
     (:up    (princ "1" *output*))
     (:right (princ "2" *output*))
     (:down  (princ "3" *output*))
@@ -142,14 +123,22 @@
 
     narr))
 
+(declaim (inline can-move-to))
+(defun can-move-to (node color x y)
+  ;; I can only move to empty squares, but the opponent can then come
+  ;; over me, since I move "first"
+  (if (= color 1)
+      (empty-square-p (tron-map node) x y)
+      (or (empty-square-p (tron-map node) x y)
+	  (equal (tron-p1 node) (list x y)))))
+
 (defun make-child-tron (node move color)
   (declare (type tron node)
 	   (type fixnum color))
 
   (let* ((x (x-of node color))
-	 (y (y-of node color))
-	 (xo (x-of node (- color)))
-	 (yo (y-of node (- color))))
+	 (y (y-of node color)))
+
     (declare (type fixnum x y))
 
     (case move
@@ -158,9 +147,7 @@
       (:up    (decf y))
       (:down  (incf y)))
 
-    ;; can move to a non-empty square if the opponent is there
-    (if (and (not (empty-square-p (tron-map node) x y))
-	     (not (and (equal x xo) (equal y yo))))
+    (if (not (can-move-to node color x y))
 	nil
 	(let* ((newtron (make-tron))
 	       (map (copy-tron-map (tron-map node))))
