@@ -7,16 +7,22 @@
 
 (declaim (type fixnum +victory+ +defeat+ +draw+))
 (defparameter +victory+ 5000)
+
+;; ok this is weird, but it bumped me up 50 places
 (defparameter +defeat+ -5000)
-(defparameter +draw+   -2500)
+
+(defparameter +draw+   0)
 
 (declaim (type fixnum +minimax-depth+))
-(defparameter +minimax-depth+ 7)
-
+;; this is safe
+;;(defparameter +minimax-depth+ 9)
+(defparameter +minimax-depth+ 9)
 
 (setq *verbose* nil)
 
 (defun count-reachables (tron color)
+  (declare (optimize (speed 3) (safety 0) (debug 0))
+	   (type fixnum color))
   (let ((map (copy-tron-map (tron-map tron)))
 	(x (x-of tron color))
 	(y (y-of tron color)))
@@ -24,49 +30,50 @@
 	     (type fixnum x y))
 
     (labels ((ff-area (x y)
-	       (declare (type fixnum x y))
+	       (declare (type fixnum x y)
+			(ftype (function (fixnum fixnum) fixnum) ff-area))
+			
 	       (if (not (empty-square-p map x y))
 		   0
 		   (progn
 		     (setf (aref map x y) #\#)
-		     (+ 1
-			(ff-area (1- x) y)
-			(ff-area x (1- y))
-			(ff-area (1+ x) y)
-			(ff-area x (1+ y)))))))
+		     (the fixnum (+ 1
+				    (ff-area (1- x) y)
+				    (ff-area x (1- y))
+				    (ff-area (1+ x) y)
+				    (ff-area x (1+ y))))))))
 
-      (+ (ff-area (1- x) y)
-	 (ff-area x (1- y))
-	 (ff-area (1+ x) y)
-	 (ff-area x (1+ y))))))
+      (the fixnum (+ (the fixnum (ff-area (1- x) y))
+		     (ff-area x (1- y))
+		     (ff-area (1+ x) y)
+		     (ff-area x (1+ y)))))))
 
 
 (defun node-value (node)
-  (let* ((reach1 (count-reachables node 1))
-	 (reach2 (count-reachables node -1))
-	 (val (- reach1 reach2)))
-    (truncate val)))
+  (declare (ftype (function (tron) fixnum) node-value))
+  (let ((reach1 (the fixnum (count-reachables node 1)))
+	(reach2 (the fixnum (count-reachables node -1))))
+    (the fixnum (- reach1 reach2))))
 
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
 
   (cond
-;;    ((draw-p node color)
-;;     (logmsg "DRAW!~%")
-;;     (* color +draw+))
-;;        
-;;    ((victory-p node color)
-;;     (logmsg "VICTORY!~%")
-;;     (* color +victory+))
-;;    
-;;    ((defeat-p node color)
-;;     (logmsg "DEFEAT!~%")     
-;;     (* color +defeat+))
-
     ((and (= color 1)
-	  (equal (tron-p1 node) (tron-p2 node)))
-     (* color +draw+))
-    
+	  (or (equal (tron-p1 node) (tron-p2 node))
+	      (and (player-stuck-p node 1)
+		   (player-stuck-p node -1))))
+	  
+     +draw+)
+
+;;    ((and (= color 1)
+;;	  (player-stuck-p node -1))
+;;     +victory+)
+
+;;    ((and (= color 1)
+;;	  (player-stuck-p node 1))
+;;     +defeat+)
+
     ((zerop depth)
      (* color (node-value node)))
     
@@ -80,12 +87,12 @@
 ;	else do
 	when child do
 	  (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
-;	    (when (= depth 3)
-;	      (logmsg "-----------~%~%")
-;	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
-;	      (logmsg child)
-;	      )
-	    
+	    (when (= depth 8)
+	      (logmsg "-----------~%~%")
+	      (logmsg "At depth " depth ", alpha " alpha ", beta " beta ", color " color ", cval " cval "~%")
+	      (logmsg child)
+	      )
+
 	    (when (> cval alpha)
 	      (setq alpha cval))
 	    (when (>= cval beta)
@@ -99,23 +106,27 @@
 	     for move in '(:left :up :right :down)
 	     as child = (make-child-tron node move 1)
 	     when child do
-	       (logmsg "find-negamax-moves: " move "~%" child)
+;	       (logmsg "find-negamax-moves: " move "~%" child)
+	       (logmsg "find-negamax-moves: " move "~%")	       
 	     and collect
 	       (list move
 		     (- (negamax child (1- +minimax-depth+) +defeat+  +victory+ -1))
 		     child)))
-    
+
     (sort nm #'> :key (lambda (x) (cadr x)))))
     
 
 (defun decide-move (tron)
-  (let ((moves (find-negamax-moves tron)))
+  (let ((moves nil))
 
-     (mapcar (lambda (x) (logmsg (car x) " " (cadr x) ",  ")) moves)
-     (logmsg "~%")
+;    (time (setq moves (find-negamax-moves tron)))
+    (setq moves (find-negamax-moves tron))
+    
+    (mapcar (lambda (x) (logmsg (car x) " " (cadr x) ",  ")) moves)
+    (logmsg "~%")
 ;;     
 ;;     ;; from equivalent moves, choose the one that brings us closer
-     (setq moves (remove-if-not (lambda (x) (equal (cadr x) (cadar moves)))
+    (setq moves (remove-if-not (lambda (x) (equal (cadr x) (cadar moves)))
  			       moves))
 ;; 
      (mapcar (lambda (x) (logmsg (car x) " " (cadr x) ",  ")) moves)
