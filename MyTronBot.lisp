@@ -18,7 +18,9 @@
 ;;(defparameter +minimax-depth+ 9)
 (defparameter +minimax-depth+ 9)
 
-(setq *verbose* nil)
+(defparameter +max-time+ 500)
+
+(setq *verbose* t)
 
 (defun count-reachables (tron color)
   (declare (optimize (speed 3) (safety 0) (debug 0))
@@ -100,20 +102,34 @@
 	finally (return-from nmax alpha)))))
 
 (defun find-negamax-moves (node)
-  (let ((nm nil))
-    (setq nm
-	  (loop
-	     for move in '(:left :up :right :down)
-	     as child = (make-child-tron node move 1)
-	     when child do
-;	       (logmsg "find-negamax-moves: " move "~%" child)
-	       (logmsg "find-negamax-moves: " move "~%")	       
-	     and collect
-	       (list move
-		     (- (negamax child (1- +minimax-depth+) +defeat+  +victory+ -1))
-		     child)))
+  (let ((start-depth 4)
+	(start-time (get-internal-real-time)))
+    (labels ((time-remaining ()
+	       (< (- (get-internal-real-time) start-time)
+		  +max-time+))
 
-    (sort nm #'> :key (lambda (x) (cadr x)))))
+	     (find-moves (depth)
+	       (let ((nm nil))
+		 (setq nm
+		       (loop
+			  for move in '(:left :up :right :down)
+			  as child = (make-child-tron node move 1)
+;			  when child do
+;			    (logmsg "find-negamax-moves: " move "~%")	       
+;			  and collect
+			  when child collect 
+			    (list move
+				  (- (negamax child (1- depth) +defeat+  +victory+ -1))
+				  child)))
+
+		 (sort nm #'> :key (lambda (x) (cadr x))))))
+
+      (loop
+	 for depth = start-depth then (incf depth)
+	 as val = (find-moves depth)
+	 do (logmsg "DEPTH: " depth "~%")
+	 until (not (time-remaining))
+	 finally (return val)))))
     
 
 (defun decide-move (tron)
