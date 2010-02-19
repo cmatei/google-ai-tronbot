@@ -17,9 +17,9 @@
   (p1 nil)
   (p2 nil))
 
-(defun tron-area (tron)
-  (the fixnum (* (tron-width tron)
-		 (tron-height tron))))
+;(defun tron-area (tron)
+;  (the fixnum (* (tron-width tron)
+;		 (tron-height tron))))
 
 (declaim (inline x-of))
 (defun x-of (tron color)
