@@ -19,23 +19,19 @@
 
 (declaim (inline x-of))
 (defun x-of (tron color)
+  (declare (type fixnum color)
+	   (ftype (function (t fixnum) fixnum) x-of))
   (if (= color 1)
       (car (tron-p1 tron))
       (car (tron-p2 tron))))
 
 (declaim (inline y-of))
 (defun y-of (tron color)
+  (declare (type fixnum color)
+	   (ftype (function (t fixnum) fixnum) x-of))
   (if (= color 1)
       (cadr (tron-p1 tron))
       (cadr (tron-p2 tron))))
-
-(defun player-distance (tron)
-  (let ((x1 (x-of tron 1))
-	(y1 (y-of tron 1))
-	(x2 (x-of tron -1))
-	(y2 (y-of tron -1)))
-    (sqrt (+ (* (- x2 x1) (- x2 x1))
-	     (* (- y2 y1) (- y2 y1))))))
 
 (declaim (inline empty-square-p))
 (defun empty-square-p (map x y)
@@ -53,7 +49,6 @@
 	     (empty-square-p map (the fixnum (1+ x)) y)
 	     (empty-square-p map x (the fixnum (1- y)))
 	     (empty-square-p map x (the fixnum (1+ y)))))))
-
 
 (defun set-tron-size (tron line)
   (let ((sp (position #\space line)))
@@ -81,7 +76,8 @@
        (loop
 	   for c character across (read-line *input* nil nil)
 	   for x fixnum from 0
-	   do (setf (aref (the (simple-array character (* *)) map) x y) c)
+;	   do (setf (aref (the (simple-array character (* *)) map) x y) c)
+	   do (setf (aref map x y) c)	    
 	     (case c
 	       (#\1 (setf (tron-p1 tron) (list x y)))
 	       (#\2 (setf (tron-p2 tron) (list x y))))))
@@ -121,6 +117,7 @@
 
 (declaim (inline can-move-to))
 (defun can-move-to (node color x y)
+  (declare (type fixnum color))
   ;; I can only move to empty squares, but the opponent can then come
   ;; over me, since I move "first"
   (if (= color 1)
