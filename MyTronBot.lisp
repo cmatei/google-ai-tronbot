@@ -7,9 +7,9 @@
 (in-package :my-tron-bot)
 
 (declaim (type fixnum +victory+ +defeat+ +draw+))
+
 (defparameter +victory+ 5000)
 (defparameter +defeat+ -5000)
-
 (defparameter +draw+       0)
 
 (defparameter +time-available+ 0.95)
@@ -19,7 +19,7 @@
 (defparameter *fixed-depth* nil)
 (defparameter *time-expired* nil)
 
-(setq *verbose* nil)
+(setq *verbose* t)
 
 (define-condition out-of-time () ())
 
@@ -125,55 +125,45 @@
 (defun dir-and-score (moves)
   (mapcar #'(lambda (x) (list (car x) (cadr x))) moves))
 
+
 (defun negamax (node depth alpha beta color)
-  (declare (type fixnum depth alpha beta color))
-  (labels ((nmax-loop (node depth color alpha beta)
-	     (declare (type fixnum depth alpha beta color))
-	     (if (zerop depth)
-		 (node-value node)
-		 (loop
-		    named nmax
-		    for move in '(:left :up :right :down)
-		    as child = (make-child-tron node move color)
-		    when child do
-		      (let ((cval 0)
-			    (nval (negamax child (1- depth) (- beta) (- alpha) (- color))))
-			(declare (type fixnum nval)
-				 (type fixnum cval))
+  (declare (type fixnum depth alpha beta color)
+	   (ftype (function (tron fixnum fixnum fixnum fixnum) fixnum) negamax))
 
-			(setq cval (- nval))
+  (when *time-expired*
+    (signal 'out-of-time))
 
-			(when (> cval alpha)
-			  (setq alpha cval))
+  ;; we detect final positions only when i am to move
+  (when (= color 1)
+    (cond ((equal (tron-p1 node) (tron-p2 node)) ; we're in the same spot
+	   (return-from negamax +draw+))
 
-			(when (>= cval beta)
-			  (return-from nmax alpha)))
-		    finally (return-from nmax alpha)))))
+	  ((player-stuck-p node 1)	         ; i am stuck
+	   (if (player-stuck-p node -1)
+	       (return-from negamax +draw+)      ; ... but he is too
+	       (return-from negamax +defeat+)))	 ; ... or not :-(
 
-    (when *time-expired*
-      (signal 'out-of-time))
-    
-    (let ((val (if (= color 1)
-		   (cond				; i am to move and ...
-		     
-		     ((equal (tron-p1 node)		; we're in the same spot
-			     (tron-p2 node))
-		      +draw+)
+	  ((player-stuck-p node -1)	         ; we've got him stuck :-)
+	   (return-from negamax +victory+))))
 
-		     ((player-stuck-p node 1)		; i am stuck
-		      (if (player-stuck-p node -1)
-			  +draw+			; ... but he is too
-			  +defeat+))			; ... or not :-(
+  (when (zerop depth)
+    (return-from negamax (node-value node)))
 
-		     ((player-stuck-p node -1)	; we've got him stuck :-)
-		      +victory+)
+  (loop
+     named nmax
+     for move in '(:left :up :right :down)
+     as child = (make-child-tron node move color)
+     when child do
+       (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
+	 (declare (type fixnum cval))
 
-		     (t				; got work to do
-		      (nmax-loop node depth color alpha beta)))
+	 (when (> cval alpha)
+	   (setq alpha cval))
 
-					; opponent reply move
-		   (nmax-loop node depth color alpha beta))))
-	  val)))
+	 (when (>= cval beta)
+	   (return-from nmax alpha)))
+		      
+     finally (return-from nmax alpha)))
 
 (defun negamax-toplevel (node depth)
   (declare (type fixnum depth))
