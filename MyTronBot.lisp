@@ -14,8 +14,6 @@
 
 (defparameter +time-available+ 0.95)
 
-(defparameter *players-separated* nil)
-
 (defparameter *fixed-depth* nil)
 (defparameter *time-expired* nil)
 
@@ -128,7 +126,7 @@
 
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color)
-	   (ftype (function (tron fixnum fixnum fixnum fixnum) fixnum) negamax))
+	   (ftype (function (tron fixnum fixnum fixnum fixnum) (values fixnum fixnum)) negamax))
 
   (when *time-expired*
     (signal 'out-of-time))
@@ -136,45 +134,62 @@
   ;; we detect final positions only when i am to move
   (when (= color 1)
     (cond ((equal (tron-p1 node) (tron-p2 node)) ; we're in the same spot
-	   (return-from negamax +draw+))
+;	   (logmsg "draw at depth " depth "~%" node "~%~%")
+	   (return-from negamax (values +draw+ depth)))
 
 	  ((player-stuck-p node 1)	         ; i am stuck
 	   (if (player-stuck-p node -1)
-	       (return-from negamax +draw+)      ; ... but he is too
-	       (return-from negamax +defeat+)))	 ; ... or not :-(
+	       (return-from negamax (values +draw+ depth))     ; ... but he is too
+	       (return-from negamax (values +defeat+ depth)))) ; ... or not :-(
 
 	  ((player-stuck-p node -1)	         ; we've got him stuck :-)
-	   (return-from negamax +victory+))))
+	   (return-from negamax (values +victory+ depth)))))
 
   (when (zerop depth)
-    (return-from negamax (node-value node)))
+    (return-from negamax (values (node-value node) 0)))
 
-  (loop
-     named nmax
-     for move in '(:left :up :right :down)
-     as child = (make-child-tron node move color)
-     when child do
-       (let ((cval (- (negamax child (1- depth) (- beta) (- alpha) (- color)))))
-	 (declare (type fixnum cval))
-
-	 (when (> cval alpha)
-	   (setq alpha cval))
-
-	 (when (>= cval beta)
-	   (return-from nmax alpha)))
+  (let ((reached-depth depth))
+    (declare (type fixnum reached-depth))
+    
+    (values 
+     (loop
+	named nmax
+	for move in '(:left :up :right :down)
+	as child = (make-child-tron node move color)
+	when child do
+	  (multiple-value-bind (nval ndepth)
+	      (negamax child (1- depth) (- beta) (- alpha) (- color))
+	      (declare (type fixnum nval ndepth))
+	    
+	    (when (> (- nval) alpha)
+	      (setq reached-depth (1+ ndepth))
+	      (setq alpha (- nval)))
+	    
+	    (when (>= (- nval) beta)
+	      (setq reached-depth (1+ ndepth))
+	      (return-from nmax alpha)))
 		      
-     finally (return-from nmax alpha)))
+	 finally (return-from nmax alpha))
+     reached-depth)))
+
 
 (defun negamax-toplevel (node depth)
   (declare (type fixnum depth))
   (let ((nm nil))
+
     (loop
        for move in '(:left :up :right :down)
        as child = (make-child-tron node move 1)
        when child do
-	 (let ((nval (negamax child (the fixnum (1- depth)) +defeat+  +victory+ -1)))
-	   (declare (type fixnum nval))
-	       (setq nm (cons (list move (the fixnum (- nval))) nm))))
+	 (multiple-value-bind (nval ndepth)
+	     (negamax child (the fixnum (1- depth)) +defeat+ +victory+ -1)
+	   (declare (type fixnum nval ndepth))
+
+	   (setq nm (cons (list move
+				(the fixnum (- nval))
+				(the fixnum (1+ ndepth)))
+			  nm))))
+
     (sort nm #'> :key (lambda (x) (cadr x)))))
 
 
