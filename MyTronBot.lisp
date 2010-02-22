@@ -12,7 +12,7 @@
 
 (defparameter +draw+       0)
 
-(defparameter +time-available+ 0.9)
+(defparameter +time-available+ 0.95)
 
 (defparameter *players-separated* nil)
 
@@ -65,7 +65,7 @@
 (defun tile-not-visited (scoreboard x y who)
   (declare (type fixnum x y who)
 	   (type (simple-array fixnum (* *)) scoreboard))
-  (let ((val (aref scoreboard y x)))
+  (let ((val (aref scoreboard x y)))
     (declare (type fixnum val))
     (or (zerop val)
 	(= val (- who)))))
@@ -74,9 +74,9 @@
 (defun tile-mark-visited (scoreboard x y who)
   (declare (type fixnum x y who)
 	   (type (simple-array fixnum (* *)) scoreboard))
-  (if (zerop (aref scoreboard y x))
-      (setf (aref scoreboard y x) who)
-      (setf (aref scoreboard y x) +tile-tie+)))
+  (if (zerop (aref scoreboard x y))
+      (setf (aref scoreboard x y) who)
+      (setf (aref scoreboard x y) +tile-tie+)))
 
 (defun node-value (tron)
   (let ((q (make-q))
@@ -97,17 +97,22 @@
        do (let* ((pos (dequeue q))
 		 (dist (car pos)))
 
+	    (declare (type fixnum dist))
+
+	    (if (> dist 0)
+		(incf dist)
+		(decf dist))
+
 	    (loop
 	       for ppos in (neighbors-of tron (cdr pos))
 ;	       do (format t "neighbors-of ~a: ~a~%" pos ppos)
 	       when (tile-not-visited scoreboard (car ppos) (cadr ppos) dist)
 	       do (progn
 		    (tile-mark-visited scoreboard (car ppos) (cadr ppos) dist)
-		    (incf val (if (< dist 0) -1 1))
-		    (enqueue q (cons (if (< dist 0)
-					 (1- dist)
-					 (1+ dist))
-				ppos))
+		    (if (> dist 0)
+			(incf val)
+			(decf val))
+		    (enqueue q (cons dist ppos))
 		    (incf l)))))
 
     val))
