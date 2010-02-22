@@ -125,7 +125,6 @@
 (defun dir-and-score (moves)
   (mapcar #'(lambda (x) (list (car x) (cadr x))) moves))
 
-
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color))
   (labels ((nmax-loop (node depth color alpha beta)
@@ -189,34 +188,6 @@
     (sort nm #'> :key (lambda (x) (cadr x)))))
 
 
-(defun count-reachables (tron color)
-  (declare (optimize (speed 3) (safety 3) (debug 0))
-	   (type fixnum color))
-  (let ((map (copy-tron-map (tron-map tron)))
-	(x (x-of tron color))
-	(y (y-of tron color)))
-    (declare (type (simple-array character (* *)) map)
-	     (type fixnum x y))
-
-    (labels ((ff-area (x y)
-	       (declare (type fixnum x y)
-			(ftype (function (fixnum fixnum) fixnum) ff-area))
-
-	       (if (not (empty-square-p map x y))
-		   0
-		   (progn
-		     (setf (aref map x y) #\#)
-		     (the fixnum (+ 1
-				    (ff-area (1- x) y)
-				    (ff-area x (1- y))
-				    (ff-area (1+ x) y)
-				    (ff-area x (1+ y))))))))
-
-      (the fixnum (+ (ff-area (1- x) y)
-		     (ff-area x (1- y))
-		     (ff-area (1+ x) y)
-		     (ff-area x (1+ y)))))))
-
 (defun iterative-deepening (node start-depth step proc)
   (declare (type fixnum start-depth step))
   (let ((moves nil)
@@ -236,56 +207,6 @@
 
     (logmsg "DEPTH: " depth-reached ", moves " (dir-and-score moves) "~%")
     moves))
-      
-
-
-;; (defun players-separated-p (tron)
-;;   (declare (optimize (speed 3) (safety 0) (debug 0)))
-;;   (let ((map (copy-tron-map (tron-map tron)))
-;; 	(x (x-of tron 1))
-;; 	(y (y-of tron 1)))
-;;     (declare (type (simple-array character (* *)) map)
-;; 	     (type fixnum x y))
-;; 
-;;     (labels ((ff-area (x y)
-;; 	       (declare (type fixnum x y)
-;; 			(ftype (function (fixnum fixnum) fixnum) ff-area))
-;; 
-;; 	       (cond ((char= (aref map x y) #\2)
-;; 		      (return-from players-separated-p nil))
-;; 		     ((not (empty-square-p map x y))
-;; 		      nil)
-;; 		     (t
-;; 		      (setf (aref map x y) #\#)
-;; 		      (or
-;; 		       (ff-area (1- x) y)
-;; 		       (ff-area x (1- y))
-;; 		       (ff-area (1+ x) y)
-;; 		       (ff-area x (1+ y)))))))
-;; 
-;;       (not (or (ff-area (1- x) y)
-;; 	       (ff-area x (1- y))
-;; 	       (ff-area (1+ x) y)
-;; 	       (ff-area x (1+ y)))))))
-;; 
-;; (defun distance-to-opponent (tron)
-;;   (let ((x1 (x-of tron 1))
-;; 	(y1 (y-of tron 1))
-;; 	(x2 (x-of tron -1))
-;; 	(y2 (y-of tron -1)))
-;;     (declare (type fixnum x1 x2 y1 y2))
-;;     (truncate (sqrt (+ (expt (- x1 x2) 2)
-;; 		       (expt (- y1 y2) 2))))))
-;; 
-;; (defun break-ties (tron moves metric)
-;;   (let ((m (loop
-;; 	      for move in moves
-;; 	      as child = (make-child-tron tron (car move) 1)
-;; 	      collecting (list (funcall metric child) move))))
-;; 
-;;     (setq m (sort m #'> :key #'(lambda (x) (car x))))
-;;     (mapcar #'(lambda (x) (cadr x)) m)))
-
 (defun decide-move (tron)
   (let* ((start-time (get-internal-real-time))
 	 (moves)
@@ -296,14 +217,6 @@
      +time-available+)
 
     (setq *time-expired* nil)
-;;    (setq *players-separated* (players-separated-p tron))
-
-;    (setq moves
-;	  (if *players-separated*
-;	      (let ((*fixed-depth* nil))
-;		(logmsg "separated!~%")
-;		(iterative-deepening tron 1 1 #'fill-toplevel))
-;	      (iterative-deepening tron 4 2 #'negamax-toplevel)))
 
     (setq moves (iterative-deepening tron 4 2 #'negamax-toplevel))
 
@@ -313,7 +226,7 @@
 	(setq moves (remove-if-not #'(lambda (move) (= (cadr move) best-move)) moves)))
 
       ;; break ties
- ;     (setq moves (break-ties tron moves #'distance-to-opponent))
+;      (setq moves (break-ties tron moves #'distance-to-opponent))
 ;      (logmsg "attack moves: " moves "~%")
       )
 
