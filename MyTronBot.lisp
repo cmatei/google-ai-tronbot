@@ -207,6 +207,7 @@
 
     (logmsg "DEPTH: " depth-reached ", moves " (dir-and-score moves) "~%")
     moves))
+
 (defun decide-move (tron)
   (let* ((start-time (get-internal-real-time))
 	 (moves)
