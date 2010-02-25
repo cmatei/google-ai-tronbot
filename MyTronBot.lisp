@@ -1,6 +1,6 @@
 
 ;; does this break me ?!
-(proclaim '(optimize (speed 3) (safety 0) (debug 0)))
+(proclaim '(optimize (speed 3) (safety 3) (debug 3)))
 
 (load "Map.lisp")
 
@@ -39,10 +39,8 @@
   (pop (q-elements q)))
 
 (declaim (inline neighbors-of))
-(defun neighbors-of (tron pos)
-  (let ((x (car pos))
-	(y (cadr pos))
-	(map (tron-map tron))
+(defun neighbors-of (tron x y)
+  (let ((map (tron-map tron))
 	(lst nil))
     (declare (type fixnum x y)
 	     (type (simple-array character (* *)) map))
@@ -90,24 +88,22 @@
 
     (declare (type fixnum val))
 
-    (enqueue q (cons  1 (tron-p1 tron)))
-    (enqueue q (cons -1 (tron-p2 tron)))
+    (enqueue q (list  1 (tron-x1 tron) (tron-y1 tron)))
+    (enqueue q (list -1 (tron-x2 tron) (tron-y2 tron)))
 
     (loop
        as f fixnum = 0 then (incf f)
        with l fixnum = 1
        until (> f l)
-       do (let* ((pos (dequeue q))
-		 (dist (car pos)))
-
-	    (declare (type fixnum dist))
+       do (destructuring-bind (dist x y) (dequeue q)
+	    (declare (type fixnum dist x y))
 
 	    (if (> dist 0)
 		(incf dist)
 		(decf dist))
 
 	    (loop
-	       for ppos in (neighbors-of tron (cdr pos))
+	       for ppos in (neighbors-of tron x y)
 ;	       do (format t "neighbors-of ~a: ~a~%" pos ppos)
 	       when (tile-not-visited scoreboard (car ppos) (cadr ppos) dist)
 	       do (progn
@@ -120,10 +116,6 @@
 
     val))
 
-(defun dir-and-score (moves)
-  (mapcar #'(lambda (x) (list (car x) (cadr x))) moves))
-
-
 (defun negamax (node depth alpha beta color)
   (declare (type fixnum depth alpha beta color)
 	   (ftype (function (tron fixnum fixnum fixnum fixnum) (values fixnum fixnum)) negamax))
@@ -133,8 +125,8 @@
 
   ;; we detect final positions only when i am to move
   (when (= color 1)
-    (cond ((equal (tron-p1 node) (tron-p2 node)) ; we're in the same spot
-;	   (logmsg "draw at depth " depth "~%" node "~%~%")
+    (cond ((and (= (tron-x1 node) (tron-x2 node)) ; we're in the same spot
+		(= (tron-y1 node) (tron-y2 node)))
 	   (return-from negamax (values +draw+ depth)))
 
 	  ((player-stuck-p node 1)	         ; i am stuck
@@ -155,21 +147,24 @@
      (loop
 	named nmax
 	for move in '(:left :up :right :down)
-	as child = (make-child-tron node move color)
-	when child do
-	  (multiple-value-bind (nval ndepth)
-	      (negamax child (1- depth) (- beta) (- alpha) (- color))
-	      (declare (type fixnum nval ndepth))
+	when (make-tron-movement node move color)
+	do (multiple-value-bind (nval ndepth)
+	       (negamax node (1- depth) (- beta) (- alpha) (- color))
+	     
+	     (declare (type fixnum nval ndepth))
 	    
-	    (when (> (- nval) alpha)
-	      (setq reached-depth (1+ ndepth))
-	      (setq alpha (- nval)))
+	     (when (> (- nval) alpha)
+	       (setq reached-depth (1+ ndepth))
+	       (setq alpha (- nval)))
 	    
-	    (when (>= (- nval) beta)
-	      (setq reached-depth (1+ ndepth))
-	      (return-from nmax alpha)))
+	     (when (>= (- nval) beta)
+	       (setq reached-depth (1+ ndepth))
+	       (undo-tron-movement node move color)
+	       (return-from nmax alpha))
+
+	     (undo-tron-movement node move color))
 		      
-	 finally (return-from nmax alpha))
+	finally (return-from nmax alpha))
      reached-depth)))
 
 
@@ -179,22 +174,56 @@
 
     (loop
        for move in '(:left :up :right :down)
-       as child = (make-child-tron node move 1)
-       when child do
-	 (multiple-value-bind (nval ndepth)
-	     (negamax child (the fixnum (1- depth)) +defeat+ +victory+ -1)
-	   (declare (type fixnum nval ndepth))
+       when (make-tron-movement node move 1)
+       do (multiple-value-bind (nval ndepth)
+	      (negamax node (the fixnum (1- depth)) +defeat+ +victory+ -1)
 
-	   (setq nm (cons (list move
-				(the fixnum (- nval))
-				(the fixnum (1+ ndepth)))
-			  nm))))
+	    (declare (type fixnum nval ndepth))
+
+	    (setq nm (cons (list move
+				 (the fixnum (- nval))
+				 (the fixnum (1+ ndepth)))
+			   nm))
+	    (undo-tron-movement node move 1)))
 
     (sort nm #'> :key (lambda (x) (cadr x)))))
 
+(defun floodfill (node depth)
+  (declare (type fixnum depth))
+  (cond (*time-expired*
+	 (signal 'out-of-time))
+	((zerop depth)
+	 (count-reachables node 1))
+	(t
+	 (let ((best-fill +defeat+))
+	   (loop
+	      for move in '(:left :up :right :down)
+	      when (make-tron-movement node move 1)
+	      do (let ((cval (floodfill node (1- depth))))
+		   (declare (type fixnum cval))
+		   (when (> cval best-fill)
+		     (setq best-fill cval))
+		   (undo-tron-movement node move 1)))
+	   (1+ best-fill)))))
+
+(defun floodfill-toplevel (node depth)
+  (declare (type fixnum depth))
+  (let ((fm nil))
+    (loop
+       for move in '(:left :up :right :down)
+       when (make-tron-movement node move 1)
+       do (progn
+	    (setq fm (cons (list move (floodfill node (1- depth))) fm))
+	    (undo-tron-movement node move 1)))
+
+    (sort fm #'> :key (lambda (x) (cadr x)))))
+
+(defun dir-and-score (moves)
+  (mapcar #'(lambda (x) (list (car x) (cadr x))) moves))
 
 (defun iterative-deepening (node start-depth step proc)
   (declare (type fixnum start-depth step))
+
   (let ((moves nil)
 	(depth-reached 0))
     (declare (type fixnum depth-reached))
@@ -213,8 +242,76 @@
     (logmsg "DEPTH: " depth-reached ", moves " (dir-and-score moves) "~%")
     moves))
 
+
+
+
+(defun copy-tron-map (tron)
+  (let ((cmap (make-array (array-dimensions (tron-map tron))
+			  :element-type 'character
+			  :adjustable nil
+			  :fill-pointer nil)))
+    
+    (loop
+       for y fixnum from 0 below (tron-height tron)
+       do (loop
+	     for x fixnum from 0 below (tron-width tron)
+	     do (setf (aref cmap x y)
+		      (aref (tron-map tron) x y))))
+
+    cmap))
+
+
+(defun count-reachables (tron color)
+  (declare (optimize (speed 3) (safety 3) (debug 0))
+	   (type fixnum color))
+  (let ((map (copy-tron-map  tron))
+	(x (if (= color 1) (tron-x1 tron) (tron-x2 tron)))
+	(y (if (= color 1) (tron-y1 tron) (tron-y2 tron))))
+    
+    (declare (type (simple-array character (* *)) map)
+	     (type fixnum x y))
+
+    (labels ((ff-area (x y)
+	       (declare (type fixnum x y)
+			(ftype (function (fixnum fixnum) fixnum) ff-area))
+
+	       (if (not (empty-square-p map x y))
+		   0
+		   (progn
+		     (setf (aref map x y) #\#)
+		     (the fixnum (+ 1
+				    (ff-area (1- x) y)
+				    (ff-area x (1- y))
+				    (ff-area (1+ x) y)
+				    (ff-area x (1+ y))))))))
+
+      (the fixnum (+ (ff-area (1- x) y)
+		     (ff-area x (1- y))
+		     (ff-area (1+ x) y)
+		     (ff-area x (1+ y)))))))
+
+(defun fill-looking (map x y)
+  (cond ((char= (aref map x y) #\2) t)
+	((char= (aref map x y) #\#) nil)
+	(t
+	 (setf (aref map x y) #\#)
+	 (or (fill-looking map (1- x) y)
+	     (fill-looking map (1+ x) y)
+	     (fill-looking map x (1- y))
+	     (fill-looking map x (1+ y))))))
+	     
+	 
+
+(defun players-separated-p (tron)
+  (let ((map (copy-tron-map tron)))
+    (not (or (fill-looking map (1- (tron-x1 tron)) (tron-y1 tron))
+	     (fill-looking map (1+ (tron-x1 tron)) (tron-y1 tron))
+	     (fill-looking map (tron-x1 tron) (1- (tron-y1 tron)))
+	     (fill-looking map (tron-x1 tron) (1+ (tron-y1 tron)))))))
+	     
+
 (defun decide-move (tron)
-  (let* ((start-time (get-internal-real-time))
+  (let ((start-time (get-internal-real-time))
 	 (moves)
 	 (end-time))
 
@@ -224,12 +321,17 @@
 
     (setq *time-expired* nil)
 
-    (setq moves (iterative-deepening tron 4 2 #'negamax-toplevel))
+
+    (if (players-separated-p tron)
+	(setq moves (iterative-deepening tron 4 1 #'floodfill-toplevel))
+	(setq moves (iterative-deepening tron 4 2 #'negamax-toplevel)))
 
     (when moves
+
       ;; keep only the best moves
       (let ((best-move (cadar moves)))
-	(setq moves (remove-if-not #'(lambda (move) (= (cadr move) best-move)) moves)))
+	(setq moves (remove-if-not #'(lambda (move)
+				       (eq (cadr move) best-move)) moves)))
 
       ;; break ties
 ;      (setq moves (break-ties tron moves #'distance-to-opponent))
@@ -254,5 +356,7 @@
      for move from 0
      do
        (read-tron tron)
-       (make-move (decide-move tron))))
+       (emit-move (decide-move tron))))
+
+
 

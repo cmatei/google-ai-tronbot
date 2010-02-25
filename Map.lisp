@@ -14,24 +14,10 @@
   (map nil)
   (width 0 :type fixnum)
   (height 0 :type fixnum)
-  (p1 nil)
-  (p2 nil))
-
-(declaim (inline x-of))
-(defun x-of (tron color)
-  (declare (type fixnum color)
-	   (ftype (function (t fixnum) fixnum) x-of))
-  (if (= color 1)
-      (car (tron-p1 tron))
-      (car (tron-p2 tron))))
-
-(declaim (inline y-of))
-(defun y-of (tron color)
-  (declare (type fixnum color)
-	   (ftype (function (t fixnum) fixnum) x-of))
-  (if (= color 1)
-      (cadr (tron-p1 tron))
-      (cadr (tron-p2 tron))))
+  (x1 0 :type fixnum)
+  (y1 0 :type fixnum)  
+  (x2 0 :type fixnum)
+  (y2 0 :type fixnum))
 
 (declaim (inline empty-square-p))
 (defun empty-square-p (map x y)
@@ -41,14 +27,21 @@
 
 (declaim (inline player-stuck-p))
 (defun player-stuck-p (tron player)
+  (declare (type fixnum player))
   (let ((map (tron-map tron))
-	(x (x-of tron player))
-	(y (y-of tron player)))
+	(x (if (= player 1)
+	       (tron-x1 tron)
+	       (tron-x2 tron)))
+	(y (if (= player 1)
+	       (tron-y1 tron)
+	       (tron-y2 tron))))
+
     (declare (type fixnum x y))
-    (not (or (empty-square-p map (the fixnum (1- x)) y)
-	     (empty-square-p map (the fixnum (1+ x)) y)
-	     (empty-square-p map x (the fixnum (1- y)))
-	     (empty-square-p map x (the fixnum (1+ y)))))))
+    (not (or (empty-square-p map (1- x) y)
+	     (empty-square-p map (1+ x) y)
+	     (empty-square-p map x (1- y))
+	     (empty-square-p map x (1+ y))))))
+
 
 (defun set-tron-size (tron line)
   (let ((sp (position #\space line)))
@@ -61,6 +54,7 @@
 	  (zerop (tron-height tron)))
     (set-tron-size tron (read-line *input* nil nil))
     (read-line *input* nil))
+  
   (unless (tron-map tron)
     (setf (tron-map tron)
 	  (make-array (list (tron-width tron) (tron-height tron))
@@ -69,22 +63,21 @@
 		      :fill-pointer nil
 		      :displaced-to nil)))
   (loop
-     with map = (tron-map tron)
-     repeat (the fixnum (tron-height tron))
+     repeat (tron-height tron)
      for y fixnum from 0
-     do
-       (loop
+     do (loop
 	   for c character across (read-line *input* nil nil)
 	   for x fixnum from 0
-;	   do (setf (aref (the (simple-array character (* *)) map) x y) c)
-	   do (setf (aref map x y) c)	    
+	   do (setf (aref (tron-map tron) x y) c)	    
 	     (case c
-	       (#\1 (setf (tron-p1 tron) (list x y)))
-	       (#\2 (setf (tron-p2 tron) (list x y))))))
+	       (#\1 (setf (tron-x1 tron) x
+			  (tron-y1 tron) y))
+	       (#\2 (setf (tron-x2 tron) x
+			  (tron-y2 tron) y)))))
   tron)
 
 
-(defun make-move (dir)
+(defun emit-move (dir)
   (case dir
     (:up    (princ "1" *output*))
     (:right (princ "2" *output*))
@@ -93,46 +86,64 @@
   (terpri *output*)
   (force-output *output*))
 
-;; utilities
-
-(defun copy-tron-map (arr)
-  (let* ((w (the fixnum (car  (array-dimensions arr))))
-	 (h (the fixnum (cadr (array-dimensions arr))))
-	 (narr (make-array (list w h)
-			   :element-type 'character
-			   :adjustable nil
-			   :fill-pointer nil
-			   :displaced-to nil))
-	 (darr (make-array (the fixnum (* w h))
-			   :element-type 'character
-			   :displaced-to arr))
-	 (ndarr (make-array (the fixnum (* w h))
-			    :element-type 'character
-			    :displaced-to narr)))
-
-    (dotimes (i (the fixnum (* w h)))
-      (setf (aref ndarr i) (aref darr i)))
-
-    narr))
 
 (declaim (inline can-move-to))
 (defun can-move-to (node color x y)
-  (declare (type fixnum color))
+  (declare (type fixnum color x y))
   ;; I can only move to empty squares, but the opponent can then come
   ;; over me, since I move "first"
   (if (= color 1)
       (empty-square-p (tron-map node) x y)
       (or (empty-square-p (tron-map node) x y)
-	  (equal (tron-p1 node) (list x y)))))
+	  (and (= (tron-x1 node) x)
+	       (= (tron-y1 node) y)))))
+;;  
+;;  (defun make-child-tron (node move color)
+;;    (declare (type tron node)
+;;  	   (type fixnum color))
+;;  
+;;    (let* ((x (x-of node color))
+;;  	 (y (y-of node color)))
+;;  
+;;      (declare (type fixnum x y))
+;;  
+;;      (case move
+;;        (:left  (decf x))
+;;        (:right (incf x))
+;;        (:up    (decf y))
+;;        (:down  (incf y)))
+;;  
+;;      (if (not (can-move-to node color x y))
+;;  	nil
+;;  	(let* ((newtron (make-tron))
+;;  	       (map (copy-tron-map (tron-map node))))
+;;  	  (declare (type (simple-array character (* *)) map))
+;;  	  
+;;  	  (setf (aref map x y) (if (= color 1) #\1 #\2))
+;;  	  
+;;  	  (setf (tron-map newtron) map)
+;;  
+;;  	  (setf (tron-width newtron) (tron-width node))
+;;  	  (setf (tron-height newtron) (tron-width node))
+;;  
+;;  	  (setf (tron-p1 newtron)
+;;  		(if (= color 1)
+;;  		    (list x y)
+;;  		    (tron-p1 node)))
+;;  
+;;  	  (setf (tron-p2 newtron)
+;;  		(if (= color 1)
+;;  		    (tron-p2 node)
+;;  		    (list x y)))
+;;  
+;;  	  newtron))))
 
-(defun make-child-tron (node move color)
-  (declare (type tron node)
-	   (type fixnum color))
 
-  (let* ((x (x-of node color))
-	 (y (y-of node color)))
+(defun make-tron-movement (tron move color)
+  (declare (type fixnum color))
 
-    (declare (type fixnum x y))
+  (let ((x (if (= color 1) (tron-x1 tron) (tron-x2 tron)))
+	(y (if (= color 1) (tron-y1 tron) (tron-y2 tron))))
 
     (case move
       (:left  (decf x))
@@ -140,50 +151,54 @@
       (:up    (decf y))
       (:down  (incf y)))
 
-    (if (not (can-move-to node color x y))
+;    (format t "would move ~a to ~a, ~a~%" color x y)
+;    (format t "from: ~a,~a ~a,~a~%"
+;	    (tron-x1 tron) (tron-y1 tron)
+;	    (tron-x2 tron) (tron-y2 tron))
+    (if (not (can-move-to tron color x y))
 	nil
-	(let* ((newtron (make-tron))
-	       (map (copy-tron-map (tron-map node))))
-	  (declare (type (simple-array character (* *)) map))
+	(progn
+	  (if (= color 1)
+	      (setf (tron-x1 tron) x (tron-y1 tron) y)
+	      (setf (tron-x2 tron) x (tron-y2 tron) y))
+
+;	  (format t "moved ~a,~a ~a,~a~%"
+;		  (tron-x1 tron) (tron-y1 tron)
+;		  (tron-x2 tron) (tron-y2 tron))
+
+	  (setf (aref (tron-map tron) x y)
+		(if (= color 1) #\1 #\2))
+	  t))))
 	  
-	  (setf (aref map x y) (if (= color 1) #\1 #\2))
-	  
-	  (setf (tron-map newtron) map)
 
-	  (setf (tron-width newtron) (tron-width node))
-	  (setf (tron-height newtron) (tron-width node))
+(defun undo-tron-movement (tron move color)
+  (declare (type fixnum color))
+  (setf (aref (tron-map tron)
+	      (if (= color 1) (tron-x1 tron) (tron-x2 tron))
+	      (if (= color 1) (tron-y1 tron) (tron-y2 tron))) #\space)
+	      
+  (case move
+    (:left  (if (= color 1) (incf (tron-x1 tron)) (incf (tron-x2 tron))))
+    (:right (if (= color 1) (decf (tron-x1 tron)) (decf (tron-x2 tron))))
+    (:up    (if (= color 1) (incf (tron-y1 tron)) (incf (tron-y2 tron))))
+    (:down  (if (= color 1) (decf (tron-y1 tron)) (decf (tron-y2 tron)))))
 
-	  (setf (tron-p1 newtron)
-		(if (= color 1)
-		    (list x y)
-		    (tron-p1 node)))
-
-	  (setf (tron-p2 newtron)
-		(if (= color 1)
-		    (tron-p2 node)
-		    (list x y)))
-
-	  newtron))))
-
-(defun tron-map-string (arr)
-  (declare (type (simple-array character (* *)) arr))
-
-  (with-output-to-string (*output*)
-    (destructuring-bind (w h) (array-dimensions arr)
-      (declare (type fixnum w h))
-      (loop
-	 for i from 0 below h
-	 do (progn
-	      (loop
-		 for j from 0 below w
-		 do
-		   (princ (aref arr j i) *output*))
-	      (terpri *output*))))
-     *output*))
+  (setf (aref (tron-map tron) (tron-x1 tron) (tron-y1 tron)) #\1)
+  (setf (aref (tron-map tron) (tron-x2 tron) (tron-y2 tron)) #\2))
+  
+	       
 
 (defmethod print-object ((tron tron) s)
-  (declare (type stream s))
-  (format s "~%~a" (tron-map-string (tron-map tron))))
+  (format s "1: ~a,~a 2: ~a,~a~%"
+	  (tron-x1 tron) (tron-y1 tron)
+	  (tron-x2 tron) (tron-y2 tron))
+  (loop
+     for y fixnum from 0 below (tron-height tron)
+     do (progn
+	  (loop
+	     for x from 0 below (tron-width tron)
+	     do (princ (aref (tron-map tron) x y) s))
+	  (terpri s))))
     
 	 
 (defun logmsg (&rest args)
@@ -194,6 +209,7 @@
 		      :if-exists :append
 		      :if-does-not-exist :create))
     (setf *trace-output* *log*))
+  
   (when *verbose*
     (format *log* (with-output-to-string (s) (dolist (a args) (princ a s))))
     (force-output *log*)))
