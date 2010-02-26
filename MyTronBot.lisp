@@ -1,6 +1,6 @@
 
 ;; does this break me ?!
-(proclaim '(optimize (speed 3) (safety 3) (debug 3)))
+(proclaim '(optimize (speed 3) (safety 0) (debug 0)))
 
 (load "Map.lisp")
 
@@ -308,7 +308,61 @@
 	     (fill-looking map (1+ (tron-x1 tron)) (tron-y1 tron))
 	     (fill-looking map (tron-x1 tron) (1- (tron-y1 tron)))
 	     (fill-looking map (tron-x1 tron) (1+ (tron-y1 tron)))))))
-	     
+
+
+(defun monte-carlo-fill (node val)
+  (declare (type fixnum val))
+  (let ((neigh (neighbors-of node (tron-x1 node) (tron-y1 node))))
+    (cond ((null neigh)
+	   val)
+	  (t
+	   (let ((newpos (elt neigh (random (length neigh)))))
+	     (setf (tron-x1 node) (car newpos)
+		   (tron-y1 node) (cadr newpos))
+	     (setf (aref (tron-map node) (tron-x1 node) (tron-y1 node)) #\1)
+	     (monte-carlo-fill node (1+ val)))))))
+
+(defun monte-carlo-toplevel (tron)
+  (let ((choices nil)
+	(choice-count 0)
+	(val 0))
+    (declare (type fixnum choice-count))
+    
+    (loop
+       for move in '(:left :right :up :down)
+       when (make-tron-movement tron move 1)
+       do (progn
+	    (setq choices (cons (list move 0 0) choices))
+	    (undo-tron-movement tron move 1)))
+
+    (setq choice-count (length choices))
+
+    (if (zerop choice-count)
+	(return-from monte-carlo-toplevel (list '(:left 0 0))))
+
+    (if (= choice-count 1)
+	(return-from monte-carlo-toplevel choices))
+
+    (loop
+       for movepick fixnum = (random choice-count)
+       as node = (make-child-tron tron (car (elt choices movepick)) 1)
+       do (let ((mc (monte-carlo-fill node 1)))
+;	    (format t "movepick ~a, node ~a, mc ~a~%" movepick node mc)
+	    (incf val)
+
+	    (incf (cadr (elt choices movepick)) mc)
+	    
+	    (incf (caddr (elt choices movepick)))
+;	    (setf (cadr (elt choices movepick))
+;		  (truncate (/ (cadr (elt choices movepick)) 2))))
+	    )
+       until *time-expired*)
+
+;    (format t "copied ~a times, got ~a~%" val choices)
+
+    (logmsg "choices " choices "~%")
+    
+    (sort choices #'> :key (lambda (x) (cadr x)))))
 
 (defun decide-move (tron)
   (let ((start-time (get-internal-real-time))
@@ -323,7 +377,8 @@
 
 
     (if (players-separated-p tron)
-	(setq moves (iterative-deepening tron 4 1 #'floodfill-toplevel))
+;	(setq moves (iterative-deepening tron 4 1 #'floodfill-toplevel))
+	(setq moves (monte-carlo-toplevel tron))
 	(setq moves (iterative-deepening tron 4 2 #'negamax-toplevel)))
 
     (when moves

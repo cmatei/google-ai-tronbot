@@ -97,46 +97,46 @@
       (or (empty-square-p (tron-map node) x y)
 	  (and (= (tron-x1 node) x)
 	       (= (tron-y1 node) y)))))
-;;  
-;;  (defun make-child-tron (node move color)
-;;    (declare (type tron node)
-;;  	   (type fixnum color))
-;;  
-;;    (let* ((x (x-of node color))
-;;  	 (y (y-of node color)))
-;;  
-;;      (declare (type fixnum x y))
-;;  
-;;      (case move
-;;        (:left  (decf x))
-;;        (:right (incf x))
-;;        (:up    (decf y))
-;;        (:down  (incf y)))
-;;  
-;;      (if (not (can-move-to node color x y))
-;;  	nil
-;;  	(let* ((newtron (make-tron))
-;;  	       (map (copy-tron-map (tron-map node))))
-;;  	  (declare (type (simple-array character (* *)) map))
-;;  	  
-;;  	  (setf (aref map x y) (if (= color 1) #\1 #\2))
-;;  	  
-;;  	  (setf (tron-map newtron) map)
-;;  
-;;  	  (setf (tron-width newtron) (tron-width node))
-;;  	  (setf (tron-height newtron) (tron-width node))
-;;  
-;;  	  (setf (tron-p1 newtron)
-;;  		(if (= color 1)
-;;  		    (list x y)
-;;  		    (tron-p1 node)))
-;;  
-;;  	  (setf (tron-p2 newtron)
-;;  		(if (= color 1)
-;;  		    (tron-p2 node)
-;;  		    (list x y)))
-;;  
-;;  	  newtron))))
+  
+(defun make-child-tron (node move color)
+  (declare (type tron node)
+	   (type fixnum color))
+
+  (let* ((x (if (= color 1) (tron-x1 node) (tron-x2 node)))
+	 (y (if (= color 1) (tron-y1 node) (tron-y2 node))))
+
+    (declare (type fixnum x y))
+
+    (case move
+      (:left  (decf x))
+      (:right (incf x))
+      (:up    (decf y))
+      (:down  (incf y)))
+
+    (if (not (can-move-to node color x y))
+	nil
+	(let* ((newtron (make-tron))
+	       (nmap (copy-tron-map node)))
+	  (declare (type (simple-array character (* *)) nmap))
+	  
+	  (setf (aref nmap x y) (if (= color 1) #\1 #\2))
+	  
+	  (setf (tron-map newtron) nmap)
+
+	  (setf (tron-width newtron) (tron-width node))
+	  (setf (tron-height newtron) (tron-height node))
+
+	  (if (= color 1)
+	      (setf (tron-x1 newtron) x
+		    (tron-y1 newtron) y
+		    (tron-x2 newtron) (tron-x2 node)
+		    (tron-y2 newtron) (tron-y2 node))
+	      (setf (tron-x2 newtron) x
+		    (tron-y2 newtron) y
+		    (tron-x1 newtron) (tron-x1 node)
+		    (tron-y1 newtron) (tron-y1 node)))
+
+	  newtron))))
 
 
 (defun make-tron-movement (tron move color)
