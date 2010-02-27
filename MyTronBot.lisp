@@ -17,7 +17,7 @@
 (defparameter *fixed-depth* nil)
 (defparameter *time-expired* nil)
 
-(setq *verbose* t)
+(setq *verbose* nil)
 
 (define-condition out-of-time () ())
 
@@ -377,8 +377,8 @@
 
 
     (if (players-separated-p tron)
-;	(setq moves (iterative-deepening tron 4 1 #'floodfill-toplevel))
-	(setq moves (monte-carlo-toplevel tron))
+	(setq moves (iterative-deepening tron 4 1 #'floodfill-toplevel))
+;	(setq moves (monte-carlo-toplevel tron))
 	(setq moves (iterative-deepening tron 4 2 #'negamax-toplevel)))
 
     (when moves
